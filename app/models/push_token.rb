@@ -1,0 +1,2 @@
+class PushToken < ApplicationRecord
+end
