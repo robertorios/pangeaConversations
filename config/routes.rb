@@ -5,6 +5,27 @@ Rails.application.routes.draw do
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
+  # --- Real-Time Communication Endpoint ---
+  # Mounts the Action Cable server, allowing clients to connect via WebSockets at /cable
+  mount ActionCable.server => '/cable'
+
+  # --- API Endpoints for Message History ---
+  # Namespaced for versioning (api/v1)
+  namespace :api do
+    namespace :v1 do
+      # Since we don't need all RESTful actions for a single conversation resource, 
+      # we use `only: []` and define a custom collection action `history`.
+      resources :conversations, only: [] do
+        collection do
+          # GET /api/v1/conversations/history
+          get :history 
+          get 'user/:user_id', action: :user_conversations
+        end
+      end
+      
+      # NOTE: We will add a route here later to handle saving Push Tokens (e.g., resources :push_tokens)
+    end
+  end
   # Defines the root path route ("/")
   # root "posts#index"
 end
