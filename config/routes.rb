@@ -9,6 +9,14 @@ Rails.application.routes.draw do
   # Mounts the Action Cable server, allowing clients to connect via WebSockets at /cable
   mount ActionCable.server => '/cable'
 
+  # --- WebSocket Monitoring Endpoints ---
+  get '/websocket/status', to: 'websocket_monitor#index'
+  get '/websocket/stats', to: 'websocket_monitor#stats'
+  post '/websocket/stop_all', to: 'websocket_monitor#stop_all'
+  post '/websocket/stop_user/:user_id', to: 'websocket_monitor#stop_user'
+  post '/websocket/pause', to: 'websocket_monitor#pause'
+  post '/websocket/resume', to: 'websocket_monitor#resume'
+
   # --- API Endpoints for Message History ---
   # Namespaced for versioning (api/v1)
   namespace :api do
@@ -19,7 +27,8 @@ Rails.application.routes.draw do
         collection do
           # GET /api/v1/conversations/history
           get :history 
-          get 'user/:user_id', action: :user_conversations
+          # get :user_conversations
+          get 'user/:user_id', to: 'conversations#user_conversations', as: :user_conversations
         end
       end
       

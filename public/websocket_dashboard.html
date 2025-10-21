@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Monitor Dashboard (v4 - PAUSED)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .stats { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .connection { background: #e8f4fd; padding: 10px; margin: 5px 0; border-radius: 3px; }
+        .timestamp { color: #666; font-size: 12px; }
+        .auto-refresh { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔌 WebSocket Monitor Dashboard</h1>
+    
+    <div class="auto-refresh">
+        <label>
+            <input type="checkbox" id="autoRefresh"> Auto-refresh every 5 minutes (PAUSED)
+        </label>
+    </div>
+    
+    <div id="stats"></div>
+    <div id="connections"></div>
+    
+    <script>
+        function fetchStats() {
+            fetch('/websocket/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.paused) {
+                        document.getElementById('stats').innerHTML = `
+                            <div class="stats" style="background: #ffe6e6; border: 2px solid #ff9999;">
+                                <h3>⏸️ WebSocket Monitoring PAUSED</h3>
+                                <p><strong>Status:</strong> ${data.message}</p>
+                                <p class="timestamp">Last updated: ${new Date(data.timestamp).toLocaleString()}</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    document.getElementById('stats').innerHTML = `
+                        <div class="stats">
+                            <h3>📊 Overall Statistics</h3>
+                            <p><strong>Total Connections:</strong> ${data.total_connections}</p>
+                            <p><strong>Total Subscriptions:</strong> ${data.total_subscriptions}</p>
+                            <p><strong>Channels:</strong> ${Object.keys(data.channels).join(', ')}</p>
+                            <p class="timestamp">Last updated: ${new Date(data.timestamp).toLocaleString()}</p>
+                        </div>
+                    `;
+                })
+                .catch(error => console.error('Error fetching stats:', error));
+                
+            fetch('/websocket/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.paused) {
+                        document.getElementById('connections').innerHTML = `
+                            <div class="stats" style="background: #ffe6e6; border: 2px solid #ff9999;">
+                                <h3>⏸️ Monitoring Paused</h3>
+                                <p>No connection data available while monitoring is paused.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    const connectionsHtml = data.connections.map(conn => `
+                        <div class="connection">
+                            <strong>Connection ID:</strong> ${conn.id}<br>
+                            <strong>Subscriptions:</strong> ${conn.subscriptions}<br>
+                            <strong>Channels:</strong> ${conn.channels.join(', ')}
+                        </div>
+                    `).join('');
+                    
+                    document.getElementById('connections').innerHTML = `
+                        <div class="stats">
+                            <h3>🔗 Active Connections</h3>
+                            ${connectionsHtml}
+                        </div>
+                    `;
+                })
+                .catch(error => console.error('Error fetching connections:', error));
+        }
+        
+        // Initial load
+        fetchStats();
+        
+        // Auto-refresh
+        let refreshInterval;
+        document.getElementById('autoRefresh').addEventListener('change', function() {
+            if (this.checked) {
+                refreshInterval = setInterval(fetchStats, 300000); // 5 minutes (300 seconds)
+            } else {
+                clearInterval(refreshInterval);
+            }
+        });
+        
+        // Auto-refresh is disabled by default (PAUSED)
+        // Uncheck the checkbox to enable auto-refresh
+    </script>
+</body>
+</html>

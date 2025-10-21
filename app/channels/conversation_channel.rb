@@ -13,19 +13,31 @@ class ConversationChannel < ApplicationCable::Channel
     #    A user listens to their own channel to receive messages from anyone.
     stream_from "conversation_#{user_id}"
     
-    # Log successful subscription
-    logger.info "User #{user_id} subscribed to conversation_#{user_id}"
+    # Enhanced logging for channel creation
+    logger.info "🔌 CHANNEL CREATED: User #{user_id} subscribed to conversation_#{user_id}"
+    logger.info "📡 STREAMING: ConversationChannel is streaming from conversation_#{user_id}"
+    logger.info "✅ SUBSCRIPTION: ConversationChannel is transmitting the subscription confirmation"
+    
+    # Also log to Rails logger for better visibility
+    Rails.logger.info "🔌 CHANNEL CREATED: User #{user_id} subscribed to conversation_#{user_id}"
   end
 
   # When the client disconnects
   def unsubscribed
-    # Log disconnection
-    logger.info "User #{params[:user_id]} unsubscribed from conversation_#{params[:user_id]}"
+    # Enhanced logging for channel disconnection
+    logger.info "🔌 CHANNEL DISCONNECTED: User #{params[:user_id]} unsubscribed from conversation_#{params[:user_id]}"
+    Rails.logger.info "🔌 CHANNEL DISCONNECTED: User #{params[:user_id]} unsubscribed from conversation_#{params[:user_id]}"
   end
 
   # This runs when a client sends a message to the server (via `chatChannel.perform('receive', data)`)
   def receive(data)
     logger.info "Received message from user #{params[:user_id]}: #{data}"
+    
+    # Check if we have active streams (simpler approach)
+    unless @_streams.present?
+      logger.warn "No active streams found for user #{params[:user_id]}. Message will be ignored."
+      return
+    end
     
     # 1. Basic validation and data extraction
     sender_id = data['sender_id'].to_i  # Use sender_id from client data
@@ -42,31 +54,71 @@ class ConversationChannel < ApplicationCable::Channel
       return
     end
 
-    # 2. Create and persist the message
-    message = Conversation.create(
-      sender_id: sender_id,
-      receiver_id: receiver_id,
-      message_text: message_text
-      # read_at will be null initially
-    )
+    # 2. Find or create conversation thread (ensure consistent ordering)
+    # Always use the smaller user_id as sender_id for consistency
+    if sender_id < receiver_id
+      conversation = Conversation.find_or_create_by(
+        sender_id: sender_id,
+        receiver_id: receiver_id
+      )
+    else
+      # Swap the order to maintain consistency
+      conversation = Conversation.find_or_create_by(
+        sender_id: receiver_id,
+        receiver_id: sender_id
+      )
+    end
+    
+    # Add the new message to the conversation thread with sender information
+    conversation.add_message(message_text, sender_id)
 
-    if message.persisted?
-      logger.info "Message saved successfully: #{message.id}"
+    if conversation.persisted?
+      logger.info "Message added to conversation: #{conversation.id}"
+      
+      # Determine the actual sender and receiver for broadcasting
+      actual_sender_id = sender_id
+      actual_receiver_id = receiver_id
+      
       # OPTIONAL: Broadcast back to the sender as well, so their client updates
       # instantly with the permanent message ID and timestamp from the DB.
       ActionCable.server.broadcast(
-        "conversation_#{sender_id}",
-        { message: message.as_json(only: [:id, :sender_id, :receiver_id, :message_text, :created_at]) }
+        "conversation_#{actual_sender_id}",
+        { 
+          conversation: conversation.as_json(only: [:id, :sender_id, :receiver_id, :message_text, :created_at, :updated_at]),
+          latest_message: conversation.latest_message,
+          actual_sender_id: actual_sender_id,
+          actual_receiver_id: actual_receiver_id
+        }
+      )
+      
+      # Broadcast to receiver
+      ActionCable.server.broadcast(
+        "conversation_#{actual_receiver_id}",
+        { 
+          conversation: conversation.as_json(only: [:id, :sender_id, :receiver_id, :message_text, :created_at, :updated_at]),
+          latest_message: conversation.latest_message,
+          actual_sender_id: actual_sender_id,
+          actual_receiver_id: actual_receiver_id
+        }
       )
       
       # NOTE: The `after_create_commit` in the model handles the broadcast to the receiver.
     else
       # Handle creation failure (e.g., logging or broadcasting an error back)
-      logger.error "Error saving message: #{message.errors.full_messages.to_sentence}"
+      logger.error "Error saving conversation: #{conversation.errors.full_messages.to_sentence}"
     end
   rescue => e
     logger.error "Error in receive method: #{e.message}"
     logger.error e.backtrace.join("\n")
+    
+    # If it's a subscription error, try to handle it gracefully
+    if e.message.include?("Unable to find subscription")
+      logger.warn "Subscription lost for user #{params[:user_id]}. Message may not be delivered."
+      # Don't re-raise the error to prevent further issues
+    else
+      # Re-raise other errors
+      raise e
+    end
   end
   
   # Placeholder for authentication
