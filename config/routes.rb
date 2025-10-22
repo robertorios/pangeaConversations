@@ -16,6 +16,10 @@ Rails.application.routes.draw do
   post '/websocket/stop_user/:user_id', to: 'websocket_monitor#stop_user'
   post '/websocket/pause', to: 'websocket_monitor#pause'
   post '/websocket/resume', to: 'websocket_monitor#resume'
+  
+  # --- Dynamic Channel Registration ---
+  post '/channels/register', to: 'channels#register'
+  get '/channels/list', to: 'channel_registration#list'
 
   # --- API Endpoints for Message History ---
   # Namespaced for versioning (api/v1)

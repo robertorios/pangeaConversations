@@ -1,32 +1,88 @@
 # app/channels/conversation_channel.rb
+#
+# Frontend Usage:
+# 
+# ✅ CORRECT: Subscribe to ConversationChannel with parameters
+#    const conversationKey = "39-40"; // e.g., for conversation between users 39 and 40
+#    const subscription = consumer.subscriptions.create(
+#      {
+#        channel: 'ConversationChannel',        // ← Always use 'ConversationChannel'
+#        conversation_key: conversationKey,      // ← Pass conversation key as parameter
+#        user_id: currentUserId
+#      },
+#      {
+#        connected: () => console.log('Connected to Conversation39-40'),
+#        received: (data) => console.log('Message received:', data),
+#        disconnected: () => console.log('Disconnected from Conversation39-40')
+#      }
+#    );
+#
+# ❌ WRONG: Don't try to subscribe to channel names directly
+#    consumer.subscriptions.create('Conversation39-40'); // ← This will cause "Subscription class not found" error
+#
+# 2. Send message:
+#    subscription.perform('receive', {
+#      sender_id: 39,
+#      receiver_id: 40,
+#      message_text: "Hello!"
+#    });
+#
+# 3. Channel naming convention:
+#    - Conversation key: "39-40" (always sorted, smaller ID first)
+#    - Stream name: "Conversation39-40" (internal, managed by Action Cable)
+#    - Both users subscribe to the same ConversationChannel with same conversation_key
+#
 class ConversationChannel < ApplicationCable::Channel
   # This runs when a client attempts to subscribe
   def subscribed
     # 1. Ensure the user is authenticated (you'll need to implement this check)
     #    For simplicity, we'll assume the current_user is available through your authentication logic.
     
-    # 2. Identify the unique conversation ID or channel name.
-    #    The 'params[:user_id]' will be sent from the React client upon connection.
-    user_id = params[:user_id] 
+    # 2. Identify the conversation key (e.g., "39-40" for conversation between users 39 and 40)
+    conversation_key = params[:conversation_key]
+    user_id = params[:user_id]
     
-    # 3. Stream from a unique channel name based on the user ID.
-    #    A user listens to their own channel to receive messages from anyone.
-    stream_from "conversation_#{user_id}"
-    
-    # Enhanced logging for channel creation
-    logger.info "🔌 CHANNEL CREATED: User #{user_id} subscribed to conversation_#{user_id}"
-    logger.info "📡 STREAMING: ConversationChannel is streaming from conversation_#{user_id}"
-    logger.info "✅ SUBSCRIPTION: ConversationChannel is transmitting the subscription confirmation"
-    
-    # Also log to Rails logger for better visibility
-    Rails.logger.info "🔌 CHANNEL CREATED: User #{user_id} subscribed to conversation_#{user_id}"
+    if conversation_key.present?
+      # 3a. Stream from conversation-specific channel (e.g., "Conversation39-40")
+      channel_name = "Conversation#{conversation_key}"
+      stream_from channel_name
+      
+      # Enhanced logging for conversation-specific channel creation
+      logger.info "🔌 CONVERSATION CHANNEL CREATED: User #{user_id} subscribed to #{channel_name}"
+      logger.info "📡 STREAMING: ConversationChannel is streaming from #{channel_name}"
+      logger.info "✅ SUBSCRIPTION: ConversationChannel is transmitting the subscription confirmation"
+      
+      # Also log to Rails logger for better visibility
+      Rails.logger.info "🔌 CONVERSATION CHANNEL CREATED: User #{user_id} subscribed to #{channel_name}"
+    else
+      # 3b. Fallback to user-specific channel (backward compatibility)
+      channel_name = "conversation_#{user_id}"
+      stream_from channel_name
+      
+      # Enhanced logging for user-specific channel creation
+      logger.info "🔌 USER CHANNEL CREATED: User #{user_id} subscribed to #{channel_name}"
+      logger.info "📡 STREAMING: ConversationChannel is streaming from #{channel_name}"
+      logger.info "✅ SUBSCRIPTION: ConversationChannel is transmitting the subscription confirmation"
+      
+      # Also log to Rails logger for better visibility
+      Rails.logger.info "🔌 USER CHANNEL CREATED: User #{user_id} subscribed to #{channel_name}"
+    end
   end
 
   # When the client disconnects
   def unsubscribed
-    # Enhanced logging for channel disconnection
-    logger.info "🔌 CHANNEL DISCONNECTED: User #{params[:user_id]} unsubscribed from conversation_#{params[:user_id]}"
-    Rails.logger.info "🔌 CHANNEL DISCONNECTED: User #{params[:user_id]} unsubscribed from conversation_#{params[:user_id]}"
+    conversation_key = params[:conversation_key]
+    user_id = params[:user_id]
+    
+    if conversation_key.present?
+      channel_name = "Conversation#{conversation_key}"
+      logger.info "🔌 CONVERSATION CHANNEL DISCONNECTED: User #{user_id} unsubscribed from #{channel_name}"
+      Rails.logger.info "🔌 CONVERSATION CHANNEL DISCONNECTED: User #{user_id} unsubscribed from #{channel_name}"
+    else
+      channel_name = "conversation_#{user_id}"
+      logger.info "🔌 USER CHANNEL DISCONNECTED: User #{user_id} unsubscribed from #{channel_name}"
+      Rails.logger.info "🔌 USER CHANNEL DISCONNECTED: User #{user_id} unsubscribed from #{channel_name}"
+    end
   end
 
   # This runs when a client sends a message to the server (via `chatChannel.perform('receive', data)`)
@@ -79,10 +135,13 @@ class ConversationChannel < ApplicationCable::Channel
       actual_sender_id = sender_id
       actual_receiver_id = receiver_id
       
-      # OPTIONAL: Broadcast back to the sender as well, so their client updates
-      # instantly with the permanent message ID and timestamp from the DB.
+      # Create conversation-specific channel name (consistent ordering)
+      conversation_key = [sender_id, receiver_id].sort.join('-')
+      conversation_channel = "Conversation#{conversation_key}"
+      
+      # Broadcast to conversation-specific channel
       ActionCable.server.broadcast(
-        "conversation_#{actual_sender_id}",
+        conversation_channel,
         { 
           conversation: conversation.as_json(only: [:id, :sender_id, :receiver_id, :message_text, :created_at, :updated_at]),
           latest_message: conversation.latest_message,
@@ -91,16 +150,7 @@ class ConversationChannel < ApplicationCable::Channel
         }
       )
       
-      # Broadcast to receiver
-      ActionCable.server.broadcast(
-        "conversation_#{actual_receiver_id}",
-        { 
-          conversation: conversation.as_json(only: [:id, :sender_id, :receiver_id, :message_text, :created_at, :updated_at]),
-          latest_message: conversation.latest_message,
-          actual_sender_id: actual_sender_id,
-          actual_receiver_id: actual_receiver_id
-        }
-      )
+      logger.info "📡 BROADCASTED: Message sent to #{conversation_channel}"
       
       # NOTE: The `after_create_commit` in the model handles the broadcast to the receiver.
     else

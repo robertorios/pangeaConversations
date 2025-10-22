@@ -77,25 +77,32 @@ class Conversation < ApplicationRecord
     end
   end
 
+  # Helper method to generate conversation key for channel naming
+  def conversation_key
+    [sender_id, receiver_id].sort.join('-')
+  end
+  
+  # Helper method to generate conversation channel name
+  def conversation_channel_name
+    "Conversation#{conversation_key}"
+  end
+
   private
 
   def broadcast_message
-    # Broadcast to both participants in the conversation
+    # Use helper method to create conversation-specific channel name
+    conversation_channel = self.conversation_channel_name
+    
+    # Broadcast to conversation-specific channel
     ActionCable.server.broadcast(
-      "conversation_#{self.sender_id}", 
+      conversation_channel,
       {
         conversation: self.as_json(only: [:id, :sender_id, :receiver_id, :message_text, :created_at, :updated_at]),
         latest_message: self.latest_message
       }
     )
     
-    ActionCable.server.broadcast(
-      "conversation_#{self.receiver_id}", 
-      {
-        conversation: self.as_json(only: [:id, :sender_id, :receiver_id, :message_text, :created_at, :updated_at]),
-        latest_message: self.latest_message
-      }
-    )
+    Rails.logger.info "📡 MODEL BROADCAST: Message sent to #{conversation_channel}"
   end
   
   def send_push_notification
