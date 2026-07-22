@@ -1,18 +1,29 @@
 # Be sure to restart your server when you modify this file.
 
-# Avoid CORS issues when API is called from the frontend app.
-# Handle Cross-Origin Resource Sharing (CORS) in order to accept cross-origin Ajax requests.
-
-# Read more: https://github.com/cyu/rack-cors
+# Cross-Origin Resource Sharing for the SPA.
+# credentials: true requires an explicit origin allowlist (never "*").
+# See CorsOrigins — development keeps localhost; production uses CORS_ALLOWED_ORIGINS only.
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
-    origins "https://1fzrjflt-5173.use2.devtunnels.ms",  # Dev tunnel frontend
-           "http://localhost:5173"  # Local development frontend
+    origins(*CorsOrigins.allowed)
 
-    resource "*",
+    resource "/api/*",
       headers: :any,
       methods: [:get, :post, :put, :patch, :delete, :options, :head],
-      credentials: true  # Allow credentials (cookies, auth headers)
+      credentials: true,
+      max_age: 600
+
+    resource "/channels/*",
+      headers: :any,
+      methods: [:get, :post, :options, :head],
+      credentials: true,
+      max_age: 600
+
+    resource "/cable",
+      headers: :any,
+      methods: [:get, :post, :options, :head],
+      credentials: true,
+      max_age: 600
   end
 end

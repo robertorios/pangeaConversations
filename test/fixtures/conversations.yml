@@ -1,13 +1,20 @@
-# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+# test/fixtures/conversations.yml
+# Numeric user ids stand in for JWT identities (this service has no users table).
 
-one:
-  sender_id: 1
-  receiver_id: 1
-  message_text: MyText
-  read_at: 2025-10-07 15:17:40
+between_a_and_b:
+  sender_id: 10
+  receiver_id: 20
+  message_text:
+    "2025-01-01T12:00:00Z":
+      text: hello from A
+      sender_id: 10
+      receiver_id: 20
 
-two:
-  sender_id: 1
-  receiver_id: 1
-  message_text: MyText
-  read_at: 2025-10-07 15:17:40
+between_b_and_c:
+  sender_id: 20
+  receiver_id: 30
+  message_text:
+    "2025-01-02T12:00:00Z":
+      text: hello from B to C
+      sender_id: 20
+      receiver_id: 30
