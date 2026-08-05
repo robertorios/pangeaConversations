@@ -1,0 +1,41 @@
+# pangeaConversations in Docker on a Mac.
+# DB + Users API on the host (Users container publishes :3000).
+#
+# Prerequisites:
+#   - Docker Desktop running
+#   - Users available on Mac :3000, Media optional
+#   - MySQL with pangea_conversations_development
+#   - Stop host `rails server -p 3002`
+#
+#   cd pangeaConversations
+#   docker compose up --build
+#
+# Health: curl -s http://127.0.0.1:3002/up
+# SPA Cable: ws://localhost:3002/cable
+
+services:
+  pangea-conversations:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: testimony-pangea-conversations:local
+    container_name: pangea-conversations
+    ports:
+      - "3002:3002"
+    env_file:
+      - .env
+    environment:
+      RAILS_ENV: development
+      DB_HOST: host.docker.internal
+      DB_PORT: "3306"
+      # .env often has 127.0.0.1 — that would point at this container, not Users
+      USERS_SERVICE_URL: http://host.docker.internal:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3002/up"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
